@@ -5,21 +5,31 @@ import { Images } from "assets/images"
 import { Colors } from "shared/styles/colors"
 import { Person, PersonHelper } from "shared/models/person"
 import { RollStateSwitcher } from "staff-app/components/roll-state/roll-state-switcher.component"
+import { RolllStateType } from "shared/models/roll"
 
 interface Props {
+  rollkey:number,
   isRollMode?: boolean
-  student: Person
+  student: Person,
+  type:RolllStateType | 'all',
+  rollCountUpdate:(next:any,id:any) => void
 }
-export const StudentListTile: React.FC<Props> = ({ isRollMode, student }) => {
+export const StudentListTile: React.FC<Props> = ({rollkey, isRollMode, student, type, rollCountUpdate }) => {
   return (
     <S.Container>
       <S.Avatar url={Images.avatar}></S.Avatar>
       <S.Content>
         <div>{PersonHelper.getFullName(student)}</div>
       </S.Content>
-      {isRollMode && (
+      {isRollMode && type==='all' && (
         <S.Roll>
-          <RollStateSwitcher />
+          <RollStateSwitcher rollKey={rollkey} rollCountUpdate={rollCountUpdate} />
+        </S.Roll>
+      )}
+
+      {isRollMode && type!=='all' && (
+        <S.Roll>
+          <RollStateSwitcher rollKey={rollkey} rollCountUpdate={rollCountUpdate} initialState ={type}/>
         </S.Roll>
       )}
     </S.Container>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react"
 import styled from "styled-components"
 import Button from "@material-ui/core/ButtonBase"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import { faArrowUp, faArrowDown }  from "@fortawesome/free-solid-svg-icons"
 import { Spacing, BorderRadius, FontWeight } from "shared/styles/styles"
 import { Colors } from "shared/styles/colors"
 import { CenteredContainer } from "shared/components/centered-container/centered-container.component"
@@ -9,31 +10,211 @@ import { Person } from "shared/models/person"
 import { useApi } from "shared/hooks/use-api"
 import { StudentListTile } from "staff-app/components/student-list-tile/student-list-tile.component"
 import { ActiveRollOverlay, ActiveRollAction } from "staff-app/components/active-roll-overlay/active-roll-overlay.component"
-
+import { RolllStateType } from "shared/models/roll"
 export const HomeBoardPage: React.FC = () => {
   const [isRollMode, setIsRollMode] = useState(false)
-  const [getStudents, data, loadState] = useApi<{ students: Person[] }>({ url: "get-homeboard-students" })
+  let [getStudents, data, loadState] = useApi<{ students: Person[] }>({ url: "get-homeboard-students" })
+  let studentdata = data?.students
+  let [arrowIcon, setArrowIcon] = useState()
+  const [allCount , setAllCount] = useState(0)
+  const [presentCount , setPresentCount] = useState(0)
+  const [lateCount , setLateCount] = useState(0)
+  const [absentCount , setAbsentCount] = useState(0)
+  const rollCount:Array<any> = Array(data?.students.length).fill('unmark')
+  const[roll,setRoll] = useState(rollCount)
 
+  interface idObj{
+    typeContent:Array<{id:number,type:RolllStateType|'all'}>,
+    ids:Array<any>|undefined
+  }
+  let rollids:idObj = {
+    typeContent:[],
+    ids:[]
+  }
+  const [ids, setRollId] = useState(rollids)
   useEffect(() => {
     void getStudents()
   }, [getStudents])
 
-  const onToolbarAction = (action: ToolbarAction) => {
+  const onToolbarAction = (action: ToolbarAction, value?) => {
     if (action === "roll") {
       setIsRollMode(true)
     }
+    else if(action === 'sort'){
+      onArrowClick()
+    }
+    else if(action === 'filter'){
+      if(!value){
+        filterStudents(null,'no match')
+      }
+      else{
+        filterStudents(null,value)
+      }
+      
+    }
   }
-
+  const clearCounts = () => {
+    setAllCount(0)
+    setPresentCount(0)
+    setAbsentCount(0)
+    setLateCount(0)
+    setRoll(rollCount)
+  }
   const onActiveRollAction = (action: ActiveRollAction) => {
     if (action === "exit") {
       setIsRollMode(false)
+      setRollId({
+        typeContent:[],
+        ids:[]
+      })
+      clearCounts()
     }
+  }
+  const updateRollCount = (next:any, id:any) => {
+    roll[id-1]=next
+    setAllCount(getCount('all',roll))
+    setPresentCount(getCount('present',roll))
+    setLateCount(getCount('late',roll))
+    setAbsentCount(getCount('absent',roll))
+
+  }
+  const getCount = (type:string, arr:Array<any>) =>{
+    if(type === 'all'){
+      return arr.filter((item) => item !== "unmark").length
+    }
+    else{
+      return arr.filter((item) => item == type).length
+    }
+  }
+  const typeAllClick = (typeContent, rollids) => {
+    roll.map((item, i) => {
+      if(item !== "unmark"){
+        rollids.push(i)
+        typeContent = [...typeContent,{id:i,type:item}]
+      }
+    })
+    return [rollids, typeContent]
+  }
+  const typeClick = (typeContent, rollids, type) => {
+    roll.map((item,i) => {
+      if(item === type){
+        rollids.push(i)
+        typeContent = [...typeContent,{id:i,type:item}]
+      }
+    })
+    return [rollids, typeContent]
+  }
+  const updateRollIds = (typeContent, rollids) => {
+    if(rollids.length){
+      setRollId({typeContent, ids:rollids})
+    }
+  }
+  const applyFilter = (typeContent, rollids, match:string) => {
+    studentdata.map((item) => {
+      if(item.first_name.toLocaleLowerCase().match(match.toLocaleLowerCase()) || item.last_name.toLocaleLowerCase().match(match.toLocaleLowerCase())){
+        rollids.push(item.id-1)
+        typeContent = [...typeContent,{id:item.id-1,type:'all'}]
+      }
+    })
+    return [rollids,typeContent]
+  }
+
+  const filterStudentsMatch = (match, rollids, typeContent) => {
+    if(match === 'no match'){
+      roll.map((item, i) => {
+          rollids.push(i)
+          typeContent = [...typeContent,{id:i,type:item}]
+      })
+      studentdata.map((item) =>{
+        if(!rollids.includes(item.id-1)){
+          rollids.push(item.id-1)
+          typeContent = [...typeContent,{id:item.id-1,type:'all'}]
+        }
+      })
+    }
+    else{
+      [rollids, typeContent] = applyFilter(typeContent,rollids,match)
+      if (!rollids.length){
+          rollids = Array(studentdata.length).fill(-1)
+      }
+    }
+    return [rollids, typeContent]
+  }
+
+  const filterStudentsType = (type, rollids, typeContent) => {
+    if(type === 'all'){
+      [rollids, typeContent] = typeAllClick(typeContent, rollids)
+     }
+     else{
+       [rollids, typeContent] = typeClick(typeContent, rollids, type)
+     }
+
+     return [rollids, typeContent]
+  }
+
+  const filterStudents = (type?:RolllStateType |'all', match?:string,) => {
+    let rollids:Array<any> = [];
+    let typeContent:Array<{id:number,type:RolllStateType|'all'}> = [];
+    if(match){
+      [rollids, typeContent] = filterStudentsMatch(match, rollids, typeContent)
+    }
+    else if(type){
+      [rollids, typeContent] = filterStudentsType(type, rollids, typeContent)
+    } 
+    updateRollIds(typeContent, rollids)
+  }
+
+  const noArrow = () => {
+    studentdata = data?.students
+  }
+
+  const arrowUp = () => {
+    studentdata?.sort((a,b) => {
+      if(a.first_name < b.first_name){
+        return 1
+      }
+      else{
+        return -1
+      }
+    })
+  }
+
+  const arrowDown = () => {
+    studentdata?.sort((a,b) => {
+      if(a.first_name < b.first_name){
+        return -1
+      }
+      else{
+        return 1
+      }
+    })
+  }
+
+  const onArrowClick = () => {
+    let icon
+    if(!arrowIcon){
+      icon = faArrowUp
+      noArrow()
+    }
+    else{
+      if(arrowIcon === faArrowUp){
+        arrowUp()
+        icon = faArrowDown
+      }
+      else{
+        arrowDown()
+        icon = null
+      }
+    }
+
+    setArrowIcon(icon)
+    
   }
 
   return (
     <>
       <S.PageContainer>
-        <Toolbar onItemClick={onToolbarAction} />
+        <Toolbar onItemClick={(action, value?) => onToolbarAction(action, value)} arrowIcon={arrowIcon} />
 
         {loadState === "loading" && (
           <CenteredContainer>
@@ -41,11 +222,32 @@ export const HomeBoardPage: React.FC = () => {
           </CenteredContainer>
         )}
 
-        {loadState === "loaded" && data?.students && (
+        {loadState === "loaded" && !!ids.ids?.length && studentdata?.length && (
           <>
-            {data.students.map((s) => (
-              <StudentListTile key={s.id} isRollMode={isRollMode} student={s} />
-            ))}
+            {studentdata.map((s) =>           
+            {
+              if(ids.ids?.includes(s.id-1)){
+                let type = ids.typeContent.filter((item) => item?.id == s.id-1)[0]
+      
+                return (
+                    <StudentListTile rollkey={s.id} isRollMode={isRollMode} student={s} rollCountUpdate={updateRollCount} type={type.type}/>
+                )
+              }
+            }
+            )}
+          </>
+        )}
+
+        {loadState === "loaded" && !ids.ids?.length && studentdata?.length && (
+          <>
+            {studentdata.map((s) => 
+              
+                  (
+                    <StudentListTile rollkey={s.id} isRollMode={isRollMode} student={s} rollCountUpdate={updateRollCount} type="all"/>
+                  )
+                  
+                
+            )}
           </>
         )}
 
@@ -55,23 +257,42 @@ export const HomeBoardPage: React.FC = () => {
           </CenteredContainer>
         )}
       </S.PageContainer>
-      <ActiveRollOverlay isActive={isRollMode} onItemClick={onActiveRollAction} />
+      <ActiveRollOverlay 
+        isActive={isRollMode} 
+        all={allCount} 
+        present={presentCount}
+        late={lateCount} 
+        absent={absentCount} 
+        onItemClick={onActiveRollAction} 
+        onRollClick={filterStudents}
+      />
     </>
   )
 }
 
-type ToolbarAction = "roll" | "sort"
+type ToolbarAction = "roll" | "sort" | "filter"
 interface ToolbarProps {
-  onItemClick: (action: ToolbarAction, value?: string) => void
+  onItemClick: (action: ToolbarAction, value?: string) => void,
+  arrowIcon: any
 }
 const Toolbar: React.FC<ToolbarProps> = (props) => {
-  const { onItemClick } = props
+  const { onItemClick, arrowIcon } = props
   return (
     <S.ToolbarContainer>
-      <div onClick={() => onItemClick("sort")}>First Name</div>
-      <div>Search</div>
-      <S.Button onClick={() => onItemClick("roll")}>Start Roll</S.Button>
+
+      <S.ButtonContainer>
+        <S.Button onClick={() => onItemClick("sort")}>First Name</S.Button>
+        <S.Button onClick={() => onItemClick("sort")}>
+          {arrowIcon && (
+            <FontAwesomeIcon icon={arrowIcon} size= "sm" />
+          )}
+        </S.Button>
+      </S.ButtonContainer>
+        <S.Input placeholder="Search" onChange={($event) => onItemClick('filter',$event.target.value) }  />
+        <S.Button onClick={() => onItemClick("roll")}>Start Roll</S.Button>
+      
     </S.ToolbarContainer>
+    
   )
 }
 
@@ -92,6 +313,10 @@ const S = {
     font-weight: ${FontWeight.strong};
     border-radius: ${BorderRadius.default};
   `,
+  ButtonContainer: styled.div`
+    display:grid;
+    grid-template-columns:100px 50px;
+  `,
   Button: styled(Button)`
     && {
       padding: ${Spacing.u2};
@@ -99,4 +324,14 @@ const S = {
       border-radius: ${BorderRadius.default};
     }
   `,
+
+  Input: styled.input`
+    padding:5px; 
+    background: transparent;
+    border:none;
+    color:white;
+    &::placeholder{
+      color:white;
+    }
+  `
 }
