@@ -17,7 +17,7 @@ export async function saveActiveRoll(roll: RollInput): Promise<ApiResponse<{}>> 
   } catch (error) {
     return {
       success: false,
-      error: {},
+      error: error,
     }
   }
 }

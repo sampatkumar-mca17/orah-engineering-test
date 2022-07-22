@@ -11,18 +11,24 @@ import { useApi } from "shared/hooks/use-api"
 import { StudentListTile } from "staff-app/components/student-list-tile/student-list-tile.component"
 import { ActiveRollOverlay, ActiveRollAction } from "staff-app/components/active-roll-overlay/active-roll-overlay.component"
 import { RolllStateType } from "shared/models/roll"
+import { useNavigate } from "react-router-dom";
+
 export const HomeBoardPage: React.FC = () => {
+  const navigate = useNavigate()
   const [isRollMode, setIsRollMode] = useState(false)
   let [getStudents, data, loadState] = useApi<{ students: Person[] }>({ url: "get-homeboard-students" })
+  let [saveRollCallBack,  saveRollData, loadSaveRollState, saveRollError] = useApi<{}>({url:'save-roll'})
+
   let studentdata = data?.students
+  let[initialNames, setInitialNames] = useState([])
   let [arrowIcon, setArrowIcon] = useState()
   const [allCount , setAllCount] = useState(0)
   const [presentCount , setPresentCount] = useState(0)
   const [lateCount , setLateCount] = useState(0)
   const [absentCount , setAbsentCount] = useState(0)
-  const rollCount:Array<any> = Array(data?.students.length).fill('unmark')
-  const[roll,setRoll] = useState(rollCount)
-
+  const initialRollStatesCount:Array<any> = Array(data?.students.length).fill('unmark')
+  const[rollStates,setRoll] = useState(initialRollStatesCount)
+  
   interface idObj{
     typeContent:Array<{id:number,type:RolllStateType|'all'}>,
     ids:Array<any>|undefined
@@ -58,10 +64,11 @@ export const HomeBoardPage: React.FC = () => {
     setPresentCount(0)
     setAbsentCount(0)
     setLateCount(0)
-    setRoll(rollCount)
+    setRoll(initialRollStatesCount)
   }
   const onActiveRollAction = (action: ActiveRollAction) => {
     if (action === "exit") {
+      
       setIsRollMode(false)
       setRollId({
         typeContent:[],
@@ -69,13 +76,25 @@ export const HomeBoardPage: React.FC = () => {
       })
       clearCounts()
     }
+    else if(action === "complete") {
+      let rollState:Array<any> = []
+        studentdata.map((item) =>{
+          rollState.push({
+            student_id: item.id,
+            roll_state: rollStates[item.id-1]? rollStates[item.id-1]:'unmark'
+          })
+        })
+         saveRollCallBack({
+          student_roll_states:rollState
+        }).then((result) => navigate('/staff/activity'))       
+    }
   }
   const updateRollCount = (next:any, id:any) => {
-    roll[id-1]=next
-    setAllCount(getCount('all',roll))
-    setPresentCount(getCount('present',roll))
-    setLateCount(getCount('late',roll))
-    setAbsentCount(getCount('absent',roll))
+    rollStates[id-1]=next
+    setAllCount(getCount('all',rollStates))
+    setPresentCount(getCount('present',rollStates))
+    setLateCount(getCount('late',rollStates))
+    setAbsentCount(getCount('absent',rollStates))
 
   }
   const getCount = (type:string, arr:Array<any>) =>{
@@ -87,7 +106,7 @@ export const HomeBoardPage: React.FC = () => {
     }
   }
   const typeAllClick = (typeContent, rollids) => {
-    roll.map((item, i) => {
+    rollStates.map((item, i) => {
       if(item !== "unmark"){
         rollids.push(i)
         typeContent = [...typeContent,{id:i,type:item}]
@@ -96,7 +115,7 @@ export const HomeBoardPage: React.FC = () => {
     return [rollids, typeContent]
   }
   const typeClick = (typeContent, rollids, type) => {
-    roll.map((item,i) => {
+    rollStates.map((item,i) => {
       if(item === type){
         rollids.push(i)
         typeContent = [...typeContent,{id:i,type:item}]
@@ -113,7 +132,7 @@ export const HomeBoardPage: React.FC = () => {
     studentdata.map((item) => {
       if(item.first_name.toLocaleLowerCase().match(match.toLocaleLowerCase()) || item.last_name.toLocaleLowerCase().match(match.toLocaleLowerCase())){
         rollids.push(item.id-1)
-        typeContent = [...typeContent,{id:item.id-1,type:'all'}]
+        typeContent = [...typeContent,{id:item.id-1,type:rollStates[item.id-1]}]
       }
     })
     return [rollids,typeContent]
@@ -121,7 +140,7 @@ export const HomeBoardPage: React.FC = () => {
 
   const filterStudentsMatch = (match, rollids, typeContent) => {
     if(match === 'no match'){
-      roll.map((item, i) => {
+      rollStates.map((item, i) => {
           rollids.push(i)
           typeContent = [...typeContent,{id:i,type:item}]
       })
@@ -152,7 +171,7 @@ export const HomeBoardPage: React.FC = () => {
      return [rollids, typeContent]
   }
 
-  const filterStudents = (type?:RolllStateType |'all', match?:string,) => {
+  const filterStudents = (type?:RolllStateType |'all', match?:string,) => { 
     let rollids:Array<any> = [];
     let typeContent:Array<{id:number,type:RolllStateType|'all'}> = [];
     if(match){
@@ -164,17 +183,22 @@ export const HomeBoardPage: React.FC = () => {
     updateRollIds(typeContent, rollids)
   }
 
-  const noArrow = () => {
-    studentdata = data?.students
+  const noArrow = () => { 
+    studentdata = data?.students.map((item, i)=>{
+       let names = initialNames[i].split(' ')
+       item.first_name = names[0]
+       item.last_name = names[1]
+       return item
+    })
   }
 
   const arrowUp = () => {
     studentdata?.sort((a,b) => {
       if(a.first_name < b.first_name){
-        return 1
+        return -1
       }
       else{
-        return -1
+        return 1
       }
     })
   }
@@ -182,27 +206,32 @@ export const HomeBoardPage: React.FC = () => {
   const arrowDown = () => {
     studentdata?.sort((a,b) => {
       if(a.first_name < b.first_name){
-        return -1
+        return 1
       }
       else{
-        return 1
+        return -1
       }
     })
   }
 
   const onArrowClick = () => {
     let icon
+    if(!initialNames.length){
+      let names = studentdata.map((item) => `${item.first_name} ${item.last_name} ${item.id}`)
+      
+      setInitialNames(names)
+    }
     if(!arrowIcon){
       icon = faArrowUp
-      noArrow()
+      arrowUp()
     }
     else{
       if(arrowIcon === faArrowUp){
-        arrowUp()
+        arrowDown()
         icon = faArrowDown
       }
       else{
-        arrowDown()
+        noArrow()
         icon = null
       }
     }
@@ -222,7 +251,7 @@ export const HomeBoardPage: React.FC = () => {
           </CenteredContainer>
         )}
 
-        {loadState === "loaded" && !!ids.ids?.length && studentdata?.length && (
+        {loadState === "loaded" && ids.ids?.length > 0 && studentdata?.length && (
           <>
             {studentdata.map((s) =>           
             {
@@ -332,6 +361,8 @@ const S = {
     color:white;
     &::placeholder{
       color:white;
+      font-weight:${FontWeight.strong};
+      border-radius: ${BorderRadius.default};
     }
   `
 }
